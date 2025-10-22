@@ -129,6 +129,7 @@ BRANCH_TARGETS = {
     "KIlimani Branch": {"target": 16000000.00, "mtd_target": 10074074.07},
     "Kitengela Branch": {"target": 7000000.00, "mtd_target": 4407407.41},
     "Thika Branch": {"target": 7000000.00, "mtd_target": 4407407.41},
+    "TOWN BRANCH": {"target": 19000000.00, "mtd_target": 11952952.96},
     "Utawala Branch": {"target": 19000000.00, "mtd_target": 11952952.96}
 }
 
