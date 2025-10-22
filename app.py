@@ -226,10 +226,10 @@ if menu == "Logbook":
                 bar_width = 0.25
                 x = np.arange(len(branches))
                 
-                # Create bars
-                bars1 = ax.bar(x - bar_width, actual, bar_width, label='Actual Disbursed', color='#1f77b4', alpha=0.8)
-                bars2 = ax.bar(x, target, bar_width, label='Target', color='#ff7f0e', alpha=0.8)
-                bars3 = ax.bar(x + bar_width, mtd_target, bar_width, label='MTD Target', color='#2ca02c', alpha=0.8)
+                # Create bars in order: Monthly Target, MTD Target, Actual Disbursement
+                bars1 = ax.bar(x - bar_width, target, bar_width, label='Monthly Target', color='#ff7f0e', alpha=0.8)
+                bars2 = ax.bar(x, mtd_target, bar_width, label='MTD Target', color='#2ca02c', alpha=0.8)
+                bars3 = ax.bar(x + bar_width, actual, bar_width, label='Actual Disbursed', color='#1f77b4', alpha=0.8)
                 
                 # Customize the chart
                 ax.set_xlabel('Branches')
@@ -258,8 +258,8 @@ if menu == "Logbook":
                 # Calculate MTD achievement percentages
                 mtd_achievement = (actual / mtd_target * 100).round(1)
                 
-                # Add percentage text above each actual bar
-                for i, (bar, achievement) in enumerate(zip(bars1, mtd_achievement)):
+                # Add percentage text above each actual bar (bars3 is now the actual disbursement)
+                for i, (bar, achievement) in enumerate(zip(bars3, mtd_achievement)):
                     height = bar.get_height()
                     ax.text(bar.get_x() + bar.get_width()/2., height + 500000,  # Half a centimeter above (500,000 units)
                            f'{achievement:.1f}%',
