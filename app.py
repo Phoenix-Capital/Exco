@@ -79,26 +79,34 @@ h1, h2, h3 {
 </style>
 """, unsafe_allow_html=True)
 
-# --- APP TITLE ---
-st.title("Exco Report App")
+# --- CUSTOM HEADER ---
+st.markdown("""
+<div style="background-color: #004080; color: white; padding: 0.5rem 1rem; margin: -1rem -1rem 1rem -1rem; display: flex; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; right: 0; z-index: 999; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <div style="text-align: center;">
+        <h2 style="margin: 0; color: white;">📊 Phoenix Capital - Executive Dashboard</h2>
+        <p style="margin: 0; font-size: 0.9rem; opacity: 0.9;">Real-time Business Intelligence & Performance Analytics</p>
+    </div>
+</div>
+<div style="height: 5px;"></div>
+""".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')), unsafe_allow_html=True)
 
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.title("📊 Business Units")
 
 # Create distinct vertical navigation buttons
-if st.sidebar.button("🚗 Logbook", use_container_width=True, type="primary" if 'menu' not in st.session_state or st.session_state.menu == "Logbook" else "secondary"):
+if st.sidebar.button("Logbook", use_container_width=True, type="primary" if 'menu' not in st.session_state or st.session_state.menu == "Logbook" else "secondary"):
     st.session_state.menu = "Logbook"
 
-if st.sidebar.button("💳 Zidisha", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Zidisha" else "secondary"):
+if st.sidebar.button("Zidisha", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Zidisha" else "secondary"):
     st.session_state.menu = "Zidisha"
 
-if st.sidebar.button("🚚 Kajea - Tracking", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Kajea - Tracking" else "secondary"):
+if st.sidebar.button("Kajea - Tech", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Kajea - Tracking" else "secondary"):
     st.session_state.menu = "Kajea - Tracking"
 
-if st.sidebar.button("🛡️ Insurance", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Insurance" else "secondary"):
+if st.sidebar.button("Insurance", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Insurance" else "secondary"):
     st.session_state.menu = "Insurance"
 
-if st.sidebar.button("🏦 Advans", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Advans" else "secondary"):
+if st.sidebar.button("Advans", use_container_width=True, type="primary" if 'menu' in st.session_state and st.session_state.menu == "Advans" else "secondary"):
     st.session_state.menu = "Advans"
 
 # Initialize menu if not set
@@ -156,8 +164,153 @@ def get_branch_name(branch_id):
 
 # --- PAGE CONTENT ---
 if menu == "Logbook":
-    st.header("🚗 Logbook Reports")
-    tab1, tab2, tab3, tab4 = st.tabs(["Disbursements", "Collections", "PAR", "Productivity"])
+    tab_dashboard, tab1, tab2, tab3, tab4 = st.tabs(["Dashboard", "Disbursements", "Collections", "PAR", "Productivity"])
+
+    with tab_dashboard:
+        st.subheader("Logbook Dashboard")
+        # Load data
+        try:
+            df_disb = pd.read_excel("logbook_disbursements.xlsx")
+        except Exception:
+            df_disb = pd.DataFrame()
+        try:
+            df_coll = pd.read_csv("logbookrepayments.csv")
+        except Exception:
+            df_coll = pd.DataFrame()
+
+        # Guard: show message if missing
+        if df_disb.empty or df_coll.empty:
+            st.warning("Missing data: ensure logbook_disbursements.xlsx and logbookrepayments.csv are present.")
+        else:
+            # Prepare dates
+            df_disb['Disbursed Date'] = pd.to_datetime(df_disb['Disbursed Date'], format='%d/%m/%Y', errors='coerce')
+            df_coll['repayment_collected_date'] = pd.to_datetime(df_coll['repayment_collected_date'], format='%d/%m/%Y', errors='coerce')
+            # Map branch ids for collections
+            df_coll['Branch Name'] = df_coll['branch_id'].map(get_branch_name)
+            # Add branch name to disbursements
+            df_disb['Branch Name'] = df_disb['Branch'].map(get_branch_name)
+
+            # Use current month and all branches by default (no filters)
+            today = pd.Timestamp.today()
+            sel_month = today.strftime('%Y-%m')
+            all_branches = sorted(set(df_disb['Branch Name'].dropna().unique()) | set(df_coll['Branch Name'].dropna().unique()))
+            # Filter out any branches that contain "nan" or are invalid
+            sel_branches = [b for b in all_branches if pd.notna(b) and 'nan' not in str(b).lower() and str(b).strip() != '']
+
+            # Month filter ranges
+            month_start = pd.to_datetime(sel_month + '-01')
+            month_end = (month_start + pd.offsets.MonthEnd(0))
+            month_mask_disb = (df_disb['Disbursed Date'] >= month_start) & (df_disb['Disbursed Date'] <= month_end)
+            month_mask_coll = (df_coll['repayment_collected_date'] >= month_start) & (df_coll['repayment_collected_date'] <= month_end)
+            branch_mask_disb = df_disb['Branch Name'].isin(sel_branches)
+            branch_mask_coll = df_coll['Branch Name'].isin(sel_branches)
+
+            disb_mtd = df_disb[month_mask_disb & branch_mask_disb]
+            coll_mtd = df_coll[month_mask_coll & branch_mask_coll]
+
+            # KPIs
+            total_disb_mtd = float(disb_mtd['Disbursed'].sum()) if 'Disbursed' in disb_mtd else 0.0
+            total_coll_mtd = float(coll_mtd['repayment_amount'].sum()) if 'repayment_amount' in coll_mtd else 0.0
+            total_outstanding = float(df_disb[branch_mask_disb]['Outstanding'].sum()) if 'Outstanding' in df_disb else 0.0
+            total_principal = float(df_disb[branch_mask_disb]['Principal'].sum()) if 'Principal' in df_disb else 0.0
+            par_pct = (total_outstanding / total_principal * 100) if total_principal > 0 else 0.0
+            # Targets (Disbursement MTD target sum for selected branches)
+            mtd_target_sum = 0.0
+            for b in sel_branches:
+                t = BRANCH_TARGETS.get(b, {}).get('mtd_target', 0.0)
+                mtd_target_sum += t
+            disb_target_ach = (total_disb_mtd / mtd_target_sum * 100) if mtd_target_sum > 0 else 0.0
+
+            col1, col2, col3, col4, col5 = st.columns(5)
+            with col1:
+                st.metric("Total Branches", len(sel_branches))
+            with col2:
+                st.metric("MTD Disbursed", f"{total_disb_mtd:,.0f}")
+            with col3:
+                st.metric("MTD Collections", f"{total_coll_mtd:,.0f}")
+            with col4:
+                st.metric("PAR %", f"{par_pct:.1f}%")
+            with col5:
+                st.metric("MTD Target Achieved", f"{disb_target_ach:.1f}%")
+
+            # Removed MTD burndown vs target per user request
+
+            # Daily Collections vs Disbursements
+            st.subheader("Daily Collections vs Disbursements")
+            daily_disb = disb_mtd.groupby(disb_mtd['Disbursed Date'].dt.date)['Disbursed'].sum().sort_index()
+            daily_coll = coll_mtd.groupby(coll_mtd['repayment_collected_date'].dt.date)['repayment_amount'].sum().sort_index()
+            trend_idx = sorted(set(daily_disb.index) | set(daily_coll.index))
+            if len(trend_idx) > 0:
+                plot_df = pd.DataFrame({
+                    'Date': trend_idx,
+                    'Disbursed': pd.Series(daily_disb, index=trend_idx).fillna(0),
+                    'Collections': pd.Series(daily_coll, index=trend_idx).fillna(0)
+                })
+                # Use Altair for smooth interpolation
+                import altair as alt
+                chart = alt.Chart(plot_df).transform_fold(
+                    ['Disbursed', 'Collections'],
+                    as_=['Metric', 'Value']
+                ).mark_line(
+                    interpolate='monotone',
+                    strokeWidth=2
+                ).encode(
+                    x=alt.X('Date:T', title='Date'),
+                    y=alt.Y('Value:Q', title='Amount'),
+                    color=alt.Color('Metric:N', scale=alt.Scale(domain=['Disbursed', 'Collections'], range=['#1f77b4', '#ff7f0e']))
+                ).properties(
+                    height=300
+                )
+                st.altair_chart(chart, use_container_width=True)
+            else:
+                st.info("No disbursements/collections for the selected period/branches.")
+
+            # Branch scatter: Disbursed vs Collection Rate sized by Outstanding
+            st.subheader("Branch Performance: Disbursed vs Collection Rate")
+            disb_by_branch = disb_mtd.groupby('Branch Name')['Disbursed'].sum()
+            coll_by_branch = coll_mtd.groupby('Branch Name')['repayment_amount'].sum()
+            out_by_branch = df_disb.groupby('Branch Name')['Outstanding'].sum() if 'Outstanding' in df_disb else pd.Series(dtype=float)
+            scatter_df = pd.DataFrame({
+                'Disbursed': disb_by_branch,
+                'Collections': coll_by_branch,
+                'Outstanding': out_by_branch
+            }).fillna(0.0)
+            scatter_df = scatter_df.loc[[b for b in sel_branches if b in scatter_df.index]]
+            # Compute collection rate
+            scatter_df['Collection Rate %'] = (scatter_df['Collections'] / scatter_df['Disbursed'].replace({0: np.nan}) * 100).fillna(0)
+
+            if not scatter_df.empty:
+                fig, ax = plt.subplots(figsize=(8, 5))
+                # Safely scale bubble sizes; handle zero/NaN max outstanding
+                max_out = scatter_df['Outstanding'].max()
+                try:
+                    max_out = float(max_out)
+                except Exception:
+                    max_out = 0.0
+                if max_out and max_out > 0:
+                    sizes = (scatter_df['Outstanding'] / max_out * 800).fillna(200)
+                else:
+                    sizes = pd.Series(200, index=scatter_df.index)
+                ax.scatter(scatter_df['Disbursed'], scatter_df['Collection Rate %'], s=sizes, alpha=0.6, c='#1f77b4')
+                for name, row in scatter_df.iterrows():
+                    ax.text(row['Disbursed'], row['Collection Rate %'], name, fontsize=8, ha='left', va='bottom')
+                ax.set_xlabel('MTD Disbursed')
+                ax.set_ylabel('Collection Rate %')
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+            else:
+                st.info("No data available for selected filters.")
+
+            st.markdown("---")
+
+            # Collector leaderboard
+            st.subheader("Top Collectors (MTD)")
+            if 'collector_id' in coll_mtd:
+                top_collectors = coll_mtd.groupby('collector_id')['repayment_amount'].sum().sort_values(ascending=False).head(10).reset_index()
+                top_collectors.columns = ['Collector ID', 'Total Collected']
+                st.dataframe(top_collectors, use_container_width=True)
+            else:
+                st.info("Collector information not available in collections data.")
 
     with tab1:
         st.subheader("Logbook Disbursements")
@@ -468,8 +621,134 @@ if menu == "Logbook":
             st.dataframe(df)
 
 elif menu == "Zidisha":
-    st.header("💳 Zidisha Reports")
-    tab1, tab2, tab3 = st.tabs(["Disbursements", "Collections", "Productivity"])
+    tab_dashboard, tab1, tab2, tab3 = st.tabs(["Dashboard", "Disbursements", "Collections", "Productivity"])
+
+    with tab_dashboard:
+        st.subheader("Zidisha Dashboard")
+        
+        # Load data
+        try:
+            df_zidisha = pd.read_excel("zidisha.xlsx")
+        except Exception:
+            df_zidisha = pd.DataFrame()
+
+        # Guard: show message if missing
+        if df_zidisha.empty:
+            st.warning("Missing data: ensure zidisha.xlsx is present.")
+        else:
+            # Prepare dates
+            df_zidisha['Disbursed On Date'] = pd.to_datetime(df_zidisha['Disbursed On Date'], errors='coerce')
+            df_zidisha['Expected Matured On Date'] = pd.to_datetime(df_zidisha['Expected Matured On Date'], errors='coerce')
+            
+            # Use current month and exclude Advans Branch by default
+            today = pd.Timestamp.today()
+            sel_month = today.strftime('%Y-%m')
+            month_start = pd.to_datetime(sel_month + '-01')
+            month_end = (month_start + pd.offsets.MonthEnd(0))
+            
+            # Filter for current month, excluding Advans Branch
+            month_mask_disb = (df_zidisha['Disbursed On Date'] >= month_start) & (df_zidisha['Disbursed On Date'] <= month_end)
+            month_mask_coll = (df_zidisha['Expected Matured On Date'] >= month_start) & (df_zidisha['Expected Matured On Date'] <= month_end)
+            advans_mask = df_zidisha['Branch Name'] != 'Advans Branch'
+            
+            disb_mtd = df_zidisha[month_mask_disb & advans_mask]
+            coll_mtd = df_zidisha[month_mask_coll & advans_mask]
+
+            # KPIs
+            total_disb_mtd = float(disb_mtd['Principal Amount'].sum()) if 'Principal Amount' in disb_mtd else 0.0
+            total_coll_mtd = float(coll_mtd['Total Repayment Derived'].sum()) if 'Total Repayment Derived' in coll_mtd else 0.0
+            total_outstanding = float(df_zidisha[advans_mask]['Total Outstanding Derived'].sum()) if 'Total Outstanding Derived' in df_zidisha else 0.0
+            total_expected = float(df_zidisha[advans_mask]['Total Expected Repayment Derived'].sum()) if 'Total Expected Repayment Derived' in df_zidisha else 0.0
+            repayment_rate = (total_coll_mtd / total_expected * 100) if total_expected > 0 else 0.0
+
+            # Count unique branches (excluding Advans)
+            unique_branches = df_zidisha[df_zidisha['Branch Name'] != 'Advans Branch']['Branch Name'].nunique()
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            with col1:
+                st.metric("Total Branches", unique_branches)
+            with col2:
+                st.metric("MTD Disbursed", f"{total_disb_mtd:,.0f}")
+            with col3:
+                st.metric("MTD Collections", f"{total_coll_mtd:,.0f}")
+            with col4:
+                st.metric("Total Outstanding", f"{total_outstanding:,.0f}")
+            with col5:
+                st.metric("Repayment Rate", f"{repayment_rate:.1f}%")
+
+            # Daily Collections vs Disbursements
+            st.subheader("Daily Collections vs Disbursements")
+            daily_disb = disb_mtd.groupby(disb_mtd['Disbursed On Date'].dt.date)['Principal Amount'].sum().sort_index()
+            daily_coll = coll_mtd.groupby(coll_mtd['Expected Matured On Date'].dt.date)['Total Repayment Derived'].sum().sort_index()
+            trend_idx = sorted(set(daily_disb.index) | set(daily_coll.index))
+            if len(trend_idx) > 0:
+                plot_df = pd.DataFrame({
+                    'Date': trend_idx,
+                    'Disbursed': pd.Series(daily_disb, index=trend_idx).fillna(0),
+                    'Collections': pd.Series(daily_coll, index=trend_idx).fillna(0)
+                })
+                # Use Altair for smooth interpolation
+                import altair as alt
+                chart = alt.Chart(plot_df).transform_fold(
+                    ['Disbursed', 'Collections'],
+                    as_=['Metric', 'Value']
+                ).mark_line(
+                    interpolate='monotone',
+                    strokeWidth=2
+                ).encode(
+                    x=alt.X('Date:T', title='Date'),
+                    y=alt.Y('Value:Q', title='Amount'),
+                    color=alt.Color('Metric:N', scale=alt.Scale(domain=['Disbursed', 'Collections'], range=['#1f77b4', '#ff7f0e']))
+                ).properties(
+                    height=300
+                )
+                st.altair_chart(chart, use_container_width=True)
+            else:
+                st.info("No disbursements/collections for the selected period.")
+
+            # Branch scatter: Disbursed vs Collection Rate sized by Outstanding
+            st.subheader("Branch Performance: Disbursed vs Collection Rate")
+            disb_by_branch = disb_mtd.groupby('Branch Name')['Principal Amount'].sum()
+            coll_by_branch = coll_mtd.groupby('Branch Name')['Total Repayment Derived'].sum()
+            out_by_branch = df_zidisha.groupby('Branch Name')['Total Outstanding Derived'].sum() if 'Total Outstanding Derived' in df_zidisha else pd.Series(dtype=float)
+            scatter_df = pd.DataFrame({
+                'Disbursed': disb_by_branch,
+                'Collections': coll_by_branch,
+                'Outstanding': out_by_branch
+            }).fillna(0.0)
+            # Compute collection rate
+            scatter_df['Collection Rate %'] = (scatter_df['Collections'] / scatter_df['Disbursed'].replace({0: np.nan}) * 100).fillna(0)
+
+            if not scatter_df.empty:
+                fig, ax = plt.subplots(figsize=(8, 5))
+                # Safely scale bubble sizes; handle zero/NaN max outstanding
+                max_out = scatter_df['Outstanding'].max()
+                try:
+                    max_out = float(max_out)
+                except Exception:
+                    max_out = 0.0
+                if max_out and max_out > 0:
+                    sizes = (scatter_df['Outstanding'] / max_out * 800).fillna(200)
+                else:
+                    sizes = pd.Series(200, index=scatter_df.index)
+                ax.scatter(scatter_df['Disbursed'], scatter_df['Collection Rate %'], s=sizes, alpha=0.6, c='#1f77b4')
+                for name, row in scatter_df.iterrows():
+                    ax.text(row['Disbursed'], row['Collection Rate %'], name, fontsize=8, ha='left', va='bottom')
+                ax.set_xlabel('MTD Disbursed')
+                ax.set_ylabel('Collection Rate %')
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+            else:
+                st.info("No data available for selected filters.")
+
+            # Loan Officer leaderboard
+            st.subheader("Top Loan Officers (MTD)")
+            if 'Loan Officer Name' in disb_mtd:
+                top_officers = disb_mtd.groupby('Loan Officer Name')['Principal Amount'].sum().sort_values(ascending=False).head(10).reset_index()
+                top_officers.columns = ['Loan Officer', 'Total Disbursed']
+                st.dataframe(top_officers, use_container_width=True)
+            else:
+                st.info("Loan Officer information not available in disbursements data.")
 
     with tab1:
         st.subheader("Zidisha Disbursements")
@@ -695,8 +974,7 @@ elif menu == "Zidisha":
             df = load_excel_data(file)
             st.dataframe(df)
 
-elif menu == "Kajea - Tracking":
-    st.header("🚚 Kajea - Tracking Reports")
+elif menu == "Kajea - Tech":
     st.info("Upload and visualize Kajea vehicle tracking data here.")
     file = st.file_uploader("Upload Kajea Tracking Excel File", type=["xlsx"])
     if file:
@@ -712,7 +990,6 @@ elif menu == "Insurance":
         st.dataframe(df)
 
 elif menu == "Advans":
-    st.header("🏦 Advans Reports")
     tab1, tab2 = st.tabs(["Disbursements", "Collections"])
 
     with tab1:
